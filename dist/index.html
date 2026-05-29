@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 Crossword Modal Mastery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+:root {
+    --background-color: #090f09;
+    --grid-background: #0d150c;
+    --cell-background: #111c0f;
+    --text-color: #d0ffd8;
+    --accent-color: #03dac6;
+    --highlight-color: rgba(3, 218, 198, 0.09);
+    --focus-color: rgba(3, 218, 198, 0.18);
+    --focus-outline: #03dac6;
+    --correct-color: rgba(3, 218, 198, 0.15);
+    --incorrect-color: rgba(255, 50, 50, 0.22);
+    --border-color: rgba(3, 218, 198, 0.28);
+    --hint-color: rgba(255, 214, 0, 0.1);
+    --xp-color: #ffd700;
+    --empty-cell: #040804;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Roboto Mono', monospace;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: clamp(10px, 2vw, 24px);
+}
+
+.game-container {
+    width: 100%;
+    max-width: min(98vw, 1200px);
+    display: grid;
+    grid-template-areas:
+        "header header"
+        "grid clues"
+        "controls clues";
+    grid-template-columns: auto 1fr;
+    gap: clamp(12px, 1.5vw, 20px);
+}
+
+/* --- HEADER --- */
+.header { grid-area: header; text-align: center; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
+#puzzle-title { color: var(--accent-color); text-transform: uppercase; letter-spacing: 2px; font-size: clamp(1.2em, 3vw, 1.9em); text-shadow: 0 0 12px rgba(3,218,198,0.25); }
+.subtitle { margin-top: 4px; font-size: clamp(0.72em, 1.5vw, 0.88em); color: rgba(208,255,216,0.5); letter-spacing: 1px; }
+
+.stats-display { display: flex; justify-content: center; gap: 15px; margin-top: 12px; flex-wrap: wrap; }
+.stat-box { font-size: 0.88em; font-weight: bold; background: rgba(3,218,198,0.05); border: 1px solid rgba(3,218,198,0.18); padding: 4px 14px; border-radius: 20px; }
+.stat-box .stat-label { color: rgba(208,255,216,0.5); margin-right: 4px; }
+.xp-display .stat-value { color: var(--xp-color); }
+.accuracy-display .stat-value { color: var(--accent-color); }
+.attempts-display .stat-value { color: rgba(208,255,216,0.7); }
+
+.level-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.level-btn {
+    padding: 7px 22px;
+    font-size: 0.85em;
+    font-family: 'Roboto Mono', monospace;
+    background-color: transparent;
+    color: var(--accent-color);
+    border: 1px solid rgba(3,218,198,0.35);
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+}
+.level-btn:hover { background-color: rgba(3,218,198,0.08); border-color: var(--accent-color); }
+.level-btn.active { background-color: var(--accent-color); color: #040804; font-weight: bold; border-color: var(--accent-color); }
+.level-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* --- HINT BOX --- */
+.hint-display {
+    grid-column: 1 / -1;
+    background-color: rgba(255, 214, 0, 0.07);
+    border-left: 3px solid var(--xp-color);
+    padding: 10px 15px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: #ffe082;
+    font-weight: 500;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+.hint-icon { font-size: 1.2em; flex-shrink: 0; }
+
+/* --- GRID --- */
+.crossword-container { grid-area: grid; display: flex; justify-content: center; align-items: flex-start; }
+
+#crossword-grid {
+    display: grid;
+    border: 1px solid rgba(3,218,198,0.28);
+    background-color: var(--empty-cell);
+    gap: 1px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.5);
+    border-radius: 5px;
+    grid-template-rows: repeat(var(--grid-rows, 10), clamp(26px, min(3.5vw, 5vh), 40px));
+    grid-template-columns: repeat(var(--grid-cols, 10), clamp(26px, min(3.5vw, 5vh), 40px));
+}
+
+.grid-cell { position: relative; background-color: var(--cell-background); border: 1px solid rgba(3,218,198,0.08); transition: background-color 0.15s ease; }
+.grid-cell.empty { background-color: var(--empty-cell); border: 1px solid rgba(0,0,0,0.6); }
+.clue-number { position: absolute; top: 2px; left: 2px; font-size: 0.6em; font-weight: bold; color: rgba(3,218,198,0.65); z-index: 2; }
+
+.cell-input {
+    width: 100%; height: 100%;
+    background-color: transparent; border: none;
+    text-align: center; font-size: 1.2em; font-weight: bold;
+    color: var(--text-color); text-transform: uppercase;
+    caret-color: var(--accent-color);
+    cursor: pointer;
+}
+.cell-input:focus { outline: none; }
+
+.grid-cell.focused-word { background-color: var(--highlight-color); }
+.grid-cell:has(.cell-input:focus) { background-color: var(--focus-color); outline: 1px solid rgba(57,255,20,0.7); }
+.cell-input.correct { color: var(--accent-color); }
+.grid-cell:has(.cell-input.correct) { background-color: var(--correct-color); }
+.cell-input.incorrect { color: #ff4455; }
+.grid-cell:has(.cell-input.incorrect) { background-color: var(--incorrect-color); }
+.cell-input[readonly] { cursor: not-allowed; }
+
+/* --- CLUES --- */
+.clues-container { grid-area: clues; display: flex; flex-direction: column; gap: 20px; padding: 20px; background-color: var(--grid-background); border-radius: 8px; border: 1px solid rgba(3,218,198,0.12); max-height: 80vh; overflow-y: auto; }
+.clue-list-wrapper h2 { color: var(--accent-color); margin-bottom: 10px; letter-spacing: 2px; font-size: 0.9em; border-bottom: 1px solid rgba(3,218,198,0.18); padding-bottom: 6px; }
+.clue-list-wrapper ol { list-style-position: inside; font-size: 0.85em; }
+li { padding: 6px 5px; cursor: pointer; border-radius: 4px; transition: background-color 0.15s ease; color: rgba(208,255,216,0.7); border-left: 2px solid transparent; }
+li:hover { background-color: rgba(3,218,198,0.06); color: var(--text-color); }
+li.highlighted { background-color: rgba(3,218,198,0.12); color: var(--accent-color); border-left-color: var(--accent-color); font-weight: bold; }
+
+/* --- CONTROLS --- */
+.controls { grid-area: controls; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+
+#check-btn, .btn-primary {
+    width: 100%;
+    max-width: 400px;
+    padding: clamp(10px, 1.2vh, 13px) 25px;
+    font-size: clamp(0.85em, 1.5vw, 1em);
+    font-family: 'Roboto Mono', monospace;
+    background-color: var(--accent-color);
+    color: #040804;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 2px;
+    transition: all 0.2s ease;
+    box-shadow: none;
+}
+#check-btn:hover, .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+
+#clear-btn, .btn-secondary {
+    width: 100%;
+    max-width: 400px;
+    padding: 10px 25px;
+    font-size: 0.9em;
+    font-family: 'Roboto Mono', monospace;
+    background-color: transparent;
+    color: rgba(208,255,216,0.5);
+    border: 1px solid rgba(3,218,198,0.2);
+    border-radius: 5px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transition: all 0.2s ease;
+}
+#clear-btn:hover, .btn-secondary:hover { background-color: rgba(3,218,198,0.06); color: var(--text-color); border-color: rgba(3,218,198,0.4); }
+
+/* --- SUCCESS OVERLAY --- */
+.hidden { display: none !important; }
+
+#success-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.82); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 100; padding: 20px; }
+.success-box { background-color: var(--grid-background); padding: clamp(20px, 4vw, 40px); border-radius: 12px; text-align: center; border: 1px solid rgba(3,218,198,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.6); max-width: 500px; width: 100%; }
+#completion-message { color: var(--accent-color); margin-bottom: 20px; font-size: clamp(1.3em, 3vw, 1.8em); }
+
+.completion-stats { display: flex; justify-content: center; gap: 30px; margin: 20px 0; flex-wrap: wrap; }
+.stat-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.stat-icon { font-size: 1.5em; }
+.stat-label { font-size: 0.8em; color: rgba(208,255,216,0.45); }
+.stat-number { font-size: 1.4em; font-weight: bold; color: var(--accent-color); }
+
+.educational-fact { background-color: rgba(3,218,198,0.05); border-left: 3px solid rgba(3,218,198,0.4); padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; }
+.educational-fact h3 { color: var(--accent-color); margin-bottom: 8px; font-size: 0.9em; letter-spacing: 1px; }
+.educational-fact p { font-size: 0.85em; line-height: 1.6; color: rgba(208,255,216,0.75); }
+
+.completion-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+.next-level-btn, .replay-btn {
+    padding: 12px 25px;
+    font-size: 0.9em;
+    font-family: 'Roboto Mono', monospace;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.next-level-btn { background-color: var(--accent-color); color: #040804; }
+.next-level-btn:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.4); transform: translateY(-2px); }
+.replay-btn { background-color: transparent; color: var(--accent-color); border: 1px solid rgba(3,218,198,0.35); }
+.replay-btn:hover { background-color: rgba(3,218,198,0.08); transform: translateY(-2px); }
+
+/* --- ADMIN PANEL --- */
+#admin-panel { position: fixed; bottom: 20px; right: 20px; background-color: var(--grid-background); border: 1px solid rgba(3,218,198,0.3); border-radius: 8px; padding: 15px; z-index: 200; box-shadow: 0 0 20px rgba(3,218,198,0.1), 0 4px 20px rgba(0,0,0,0.6); }
+#admin-panel h3 { color: var(--accent-color); margin-bottom: 10px; text-align: center; font-size: 0.9em; letter-spacing: 1px; }
+#admin-panel button { display: block; width: 100%; margin-top: 8px; padding: 6px 10px; font-family: 'Roboto Mono', monospace; font-size: 0.8em; background: rgba(3,218,198,0.12); color: var(--accent-color); border: 1px solid rgba(3,218,198,0.25); border-radius: 4px; cursor: pointer; }
+
+/* --- DEV MODE --- */
+.dev-coords { position: absolute; bottom: 2px; right: 3px; font-size: 0.55em; font-weight: bold; color: rgba(255, 82, 82, 0.85); z-index: 5; display: none; }
+.game-container.dev-mode .dev-coords { display: block; }
+.game-container.dev-mode .clue-number { background-color: rgba(3,218,198,0.1); padding: 0 2px; border-radius: 2px; }
+.dev-answer { position: absolute; top: 2px; right: 3px; font-size: 0.8em; font-weight: bold; color: rgba(3,218,198,0.9); z-index: 5; display: none; }
+.game-container.dev-answers-mode .dev-answer { display: block; }
+
+/* --- MUSIC BUTTON (game page) --- */
+.music-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    background-color: rgba(17, 28, 15, 0.9);
+    border: 1px solid rgba(3,218,198,0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2em;
+    color: var(--accent-color);
+    transition: all 0.2s ease;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+}
+.music-btn:hover { border-color: rgba(3,218,198,0.6); background-color: rgba(3,218,198,0.1); }
+.music-btn.muted { color: rgba(208,255,216,0.3); border-color: rgba(3,218,198,0.12); }
+
+/* --- RESPONSIVE --- */
+@media (max-width: 1000px) {
+    .game-container {
+        grid-template-areas: "header header" "grid clues" "controls clues";
+        grid-template-columns: auto 1fr;
+    }
+}
+
+@media (max-width: 820px) {
+    .game-container {
+        grid-template-areas: "header" "grid" "clues" "controls";
+        grid-template-columns: 1fr;
+    }
+    .crossword-container { overflow-x: auto; }
+    .clues-container { flex-direction: row; justify-content: space-around; max-height: none; }
+    .controls { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+    #check-btn, #clear-btn, .btn-primary, .btn-secondary { max-width: 200px; }
+}
+
+@media (max-width: 600px) {
+    .clues-container { flex-direction: column; }
+    #crossword-grid {
+        grid-template-rows: repeat(var(--grid-rows, 10), min(32px, calc(92vw / var(--grid-cols, 10))));
+        grid-template-columns: repeat(var(--grid-cols, 10), min(32px, calc(92vw / var(--grid-cols, 10))));
+    }
+    .cell-input { font-size: 0.95em; }
+    .clue-number { font-size: 0.48em; }
+    .completion-stats { gap: 12px; }
+    .controls { flex-direction: column; }
+    #check-btn, #clear-btn, .btn-primary, .btn-secondary { max-width: 100%; }
+}
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <div class="title-section">
+                <h1 id="puzzle-title">📚 Crossword Modal Mastery</h1>
+                <p class="subtitle" id="level-subtitle">Modal Mastery - Level 1</p>
+            </div>
+            <div class="level-buttons">
+                <button class="level-btn active" data-level="1">Level 1</button>
+                <button class="level-btn" data-level="2" id="level2-btn" disabled>Level 2 🔒</button>
+            </div>
+            <div class="stats-display">
+                <div class="stat-box xp-display">
+                    <span class="stat-label">XP:</span>
+                    <span class="stat-value"><span id="current-xp">0</span> / <span id="max-xp">200</span></span>
+                </div>
+                <div class="stat-box accuracy-display">
+                    <span class="stat-label">Accuracy:</span>
+                    <span class="stat-value" id="accuracy-value">100%</span>
+                </div>
+                <div class="stat-box attempts-display">
+                    <span class="stat-label">Attempts:</span>
+                    <span class="stat-value" id="attempts-value">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="hint-display hidden" id="hint-display">
+            <span class="hint-icon">💡</span>
+            <span class="hint-text" id="hint-text"></span>
+        </div>
+
+        <div class="crossword-container">
+            <div id="crossword-grid"></div>
+        </div>
+
+        <div class="clues-container">
+            <div class="clue-list-wrapper">
+                <h2>Across</h2>
+                <ol id="across-clues"></ol>
+            </div>
+            <div class="clue-list-wrapper">
+                <h2>Down</h2>
+                <ol id="down-clues"></ol>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="check-btn" class="btn-primary">✓ Check Puzzle</button>
+            <button id="clear-btn" class="btn-secondary">🗑️ Clear Grid</button>
+        </div>
+    </div>
+
+    <div id="success-overlay" class="hidden">
+        <div class="success-box">
+            <h2 id="completion-message">🎉 Level Complete! 🎉</h2>
+            <div class="completion-stats">
+                <div class="stat-item">
+                    <span class="stat-icon">⭐</span>
+                    <span class="stat-label">XP Earned</span>
+                    <span class="stat-number" id="earned-xp">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">🎯</span>
+                    <span class="stat-label">Accuracy</span>
+                    <span class="stat-number" id="accuracy-display">100%</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">⏱️</span>
+                    <span class="stat-label">Time Taken</span>
+                    <span class="stat-number" id="time-display">0:00</span>
+                </div>
+            </div>
+            <div class="educational-fact" id="educational-fact">
+                <h3>🔬 Did You Know?</h3>
+                <p id="fact-text"></p>
+            </div>
+            <div class="completion-actions">
+                <button class="next-level-btn hidden" id="next-level-btn">Continue to Level 2 →</button>
+                <button class="replay-btn" id="replay-btn">↻ Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-panel" class="hidden">
+        <h3>🔧 Admin Panel</h3>
+        <p>Debug mode activated!</p>
+        <button id="unlock-all-btn">Unlock All Levels</button>
+        <button id="reset-progress-btn">Reset Progress</button>
+    </div>
+
+    <audio src="music.mp3" loop id="bg-music"></audio>
+
+    <!-- Music toggle button -->
+    <button class="music-btn" id="music-btn" title="Toggle Music">🔊</button>
+
+    <script>
+[INLINED_ANALYTICS]
+    </script>
+    <script>
+// Puzzle data inlined as JS variables
+window.PUZZLE_JSON = [INLINED_PUZZLE_JSON];
+window.PUZZLE_LEVEL2_JSON = [INLINED_PUZZLE_LEVEL2_JSON];
+window.LEVEL1_JSON = [INLINED_LEVEL1_JSON];
+window.LEVEL2_JSON = [INLINED_LEVEL2_JSON];
+    </script>
+    <script>
+[INLINED_BUNDLE]
+    </script>
+    <script>
+        // Music persistence from landing page
+        const bgMusic = document.getElementById('bg-music');
+        const musicBtn = document.getElementById('music-btn');
+        let musicPlaying = false;
+
+        bgMusic.volume = 0.4;
+
+        function setMusicState(playing) {
+            musicPlaying = playing;
+            musicBtn.textContent = playing ? '🔊' : '🔇';
+            musicBtn.classList.toggle('muted', !playing);
+            sessionStorage.setItem('musicPlaying', playing ? '1' : '0');
+        }
+
+        // Restore state from landing page
+        const savedState = sessionStorage.getItem('musicPlaying');
+        if (savedState === '1') {
+            bgMusic.play().then(() => setMusicState(true)).catch(() => setMusicState(false));
+        } else {
+            setMusicState(false);
+        }
+
+        musicBtn.addEventListener('click', () => {
+            if (musicPlaying) {
+                bgMusic.pause();
+                setMusicState(false);
+            } else {
+                bgMusic.play().catch(() => {});
+                setMusicState(true);
+            }
+        });
+    </script>
+</body>
+</html>
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .word-container {
+            position: absolute;
+            display: flex;
+            gap: 2px;
+        }
+
+        .word-container.horizontal {
+            flex-direction: row;
+        }
+
+        .word-container.vertical {
+            flex-direction: column;
+        }
+
+        .letter-box {
+            width: 35px;
+            height: 35px;
+            border: 1px solid rgba(57, 255, 20, 0.2);
+            background-color: rgba(57, 255, 20, 0.05);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Roboto Mono', monospace;
+            font-weight: bold;
+            color: rgba(57, 255, 20, 0.4);
+            font-size: 1.1em;
+            opacity: 0;
+            animation: letterAppear 0.375s ease-in forwards;
+        }
+
+        @keyframes letterAppear {
+            0% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            100% {
+                opacity: 0.75;
+                transform: scale(1);
+            }
+        }
+
+        .word-container.fade-out .letter-box {
+            animation: letterDisappear 0.375s ease-out forwards;
+        }
+
+        @keyframes letterDisappear {
+            0% {
+                opacity: 0.75;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: min(92vw, 480px);
+            text-align: center;
+            animation: fadeIn 0.8s ease-in;
+            position: relative;
+            z-index: 1;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .title-container {
+            margin-bottom: clamp(30px, 6vh, 55px);
+            padding: 10px 20px;
+        }
+
+        .game-eyebrow {
+            font-size: clamp(0.65em, 2vw, 0.78em);
+            color: rgba(57, 255, 20, 0.55);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .game-title-text {
+            font-size: clamp(1.8em, 8vw, 3.2em);
+            font-weight: 700;
+            color: var(--accent-color);
+            letter-spacing: clamp(2px, 1vw, 5px);
+            text-transform: uppercase;
+            line-height: 1.1;
+            display: block;
+        }
+
+        .game-subtitle {
+            font-size: clamp(0.7em, 2.5vw, 0.95em);
+            color: rgba(208, 255, 216, 0.45);
+            letter-spacing: clamp(2px, 1vw, 4px);
+            text-transform: uppercase;
+            margin-top: 8px;
+        }
+
+        .game-title-img {
+            display: none;
+        }
+
+        .buttons-container {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(12px, 3vw, 20px);
+            padding: 0 clamp(10px, 4vw, 20px);
+        }
+
+        .btn {
+            padding: clamp(13px, 2.5vh, 18px) clamp(24px, 6vw, 40px);
+            font-size: clamp(0.9em, 3vw, 1.15em);
+            font-family: 'Roboto Mono', monospace;
+            font-weight: bold;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            letter-spacing: clamp(1px, 0.5vw, 2px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .play-btn {
+            background-color: var(--accent-color);
+            color: #040804;
+            box-shadow: none;
+        }
+
+        .play-btn:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+        }
+
+        .play-btn:active {
+            transform: translateY(-1px);
+        }
+
+        .how-to-btn {
+            background-color: transparent;
+            color: var(--accent-color);
+            border: 1px solid rgba(57, 255, 20, 0.45);
+        }
+
+        .how-to-btn:hover {
+            background-color: rgba(57, 255, 20, 0.08);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+        }
+
+        /* Popup Overlay */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .popup-overlay.active {
+            display: flex;
+        }
+
+        .popup-content {
+            background-color: transparent;
+            border-radius: 12px;
+            padding: 0;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            position: relative;
+            animation: slideUp 0.4s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .close-btn {
+            display: none;
+        }
+
+        /* How to Play Content Styles */
+        .how-to-play-content {
+            background: linear-gradient(135deg, #0d1a0c 0%, #111f10 100%);
+            border-radius: 16px;
+            padding: clamp(20px, 4vw, 40px);
+            max-width: 680px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            border: 1px solid rgba(57, 255, 20, 0.3);
+        }
+
+        .how-to-title {
+            font-size: clamp(1.6em, 5vw, 2.4em);
+            text-align: center;
+            margin-bottom: clamp(20px, 4vh, 40px);
+            color: var(--text-color);
+            font-weight: 700;
+            letter-spacing: 3px;
+        }
+
+        .title-letter {
+            display: inline-block;
+            border: 1px solid rgba(57, 255, 20, 0.5);
+            padding: 4px 12px;
+            margin: 0 3px;
+            background-color: rgba(57, 255, 20, 0.08);
+            border-radius: 5px;
+            color: var(--accent-color);
+        }
+
+        .title-letter sub {
+            font-size: 0.5em;
+            color: var(--accent-color);
+            vertical-align: sub;
+        }
+
+        .instruction-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: clamp(18px, 3vh, 35px);
+            padding: clamp(12px, 2vw, 20px);
+            background-color: rgba(57, 255, 20, 0.04);
+            border-radius: 12px;
+            border-left: 3px solid rgba(57, 255, 20, 0.35);
+        }
+
+        .instruction-number {
+            font-size: 1.6em;
+            font-weight: bold;
+            color: var(--accent-color);
+            background-color: rgba(57, 255, 20, 0.08);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 16px;
+            flex-shrink: 0;
+            border: 1px solid rgba(57, 255, 20, 0.35);
+        }
+
+        .instruction-text {
+            flex: 1;
+            color: var(--text-color);
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+
+        .instruction-text strong {
+            color: var(--accent-color);
+        }
+
+        .instruction-visual {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .mini-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 50px);
+            grid-template-rows: repeat(3, 50px);
+            gap: 3px;
+            margin: 10px 0;
+        }
+
+        .mini-cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid rgba(57, 255, 20, 0.2);
+            background-color: rgba(57, 255, 20, 0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--text-color);
+            border-radius: 4px;
+        }
+
+        .mini-cell.filled {
+            background-color: rgba(57, 255, 20, 0.12);
+            border-color: rgba(57, 255, 20, 0.7);
+            color: var(--accent-color);
+        }
+
+        .check-demo-btn {
+            padding: 13px 36px;
+            font-size: 1em;
+            font-family: 'Roboto Mono', monospace;
+            font-weight: bold;
+            background-color: var(--accent-color);
+            color: #040804;
+            border: none;
+            border-radius: 8px;
+            cursor: default;
+            letter-spacing: 2px;
+        }
+
+        .back-btn {
+            margin-top: 16px;
+            padding: clamp(11px, 2vh, 15px) clamp(30px, 6vw, 50px);
+            font-size: clamp(0.85em, 2.5vw, 1.05em);
+            font-family: 'Roboto Mono', monospace;
+            font-weight: bold;
+            text-transform: uppercase;
+            background-color: var(--accent-color);
+            color: #040804;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            letter-spacing: 2px;
+        }
+
+        .back-btn:hover {
+            background-color: var(--button-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+        }
+
+        .popup-title {
+            color: var(--accent-color);
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: none;
+        }
+
+        .instructions-text {
+            text-align: left;
+            line-height: 1.8;
+            color: var(--text-color);
+            display: none;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 480px) {
+            .popup-content { max-width: 96%; }
+            .how-to-play-content { border-radius: 12px; }
+            .how-to-title { letter-spacing: 1px; }
+            .title-letter { padding: 2px 8px; margin: 0 1px; }
+            .instruction-item { flex-direction: column; }
+            .instruction-number { margin-right: 0; margin-bottom: 10px; }
+            .mini-grid {
+                grid-template-columns: repeat(4, 36px);
+                grid-template-rows: repeat(3, 36px);
+            }
+            .mini-cell { width: 36px; height: 36px; font-size: 0.9em; }
+        }
+
+        /* Music Control Button */
+        .music-control {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            background-color: rgba(17, 28, 15, 0.92);
+            border: 1px solid rgba(57, 255, 20, 0.28);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2em;
+            color: var(--accent-color);
+            transition: all 0.2s ease;
+            z-index: 100;
+            backdrop-filter: blur(4px);
+            box-shadow: none;
+        }
+
+        .music-control:hover {
+            transform: scale(1.08);
+            border-color: rgba(57, 255, 20, 0.55);
+        }
+
+        .music-control.muted {
+            background-color: rgba(30, 30, 30, 0.7);
+            border-color: rgba(100, 100, 100, 0.3);
+            color: rgba(208,255,216,0.28);
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Animation -->
+    <div class="bg-animation" id="bgAnimation"></div>
+
+    <div class="main-container">
+        <div class="title-container">
+            <h1 class="game-title-text" id="gameTitleText">Crossword Modal Mastery</h1>
+            <p class="game-subtitle">Medieval Dynasty Challenge</p>
+        </div>
+
+        <div class="buttons-container">
+            <button class="btn play-btn" id="playBtn">
+                <span>Play Game</span>
+            </button>
+            <button class="btn how-to-btn" id="howToBtn">
+                <span>How to Play</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- How to Play Popup -->
+    <div class="popup-overlay" id="howToPopup">
+        <div class="popup-content">
+            <div class="how-to-play-content">
+                <h2 class="how-to-title"><span class="title-letter">H</span>ow <span class="title-letter">T</span>o <span class="title-letter">P<sub>La</sub></span>y</h2>
+                
+                <div class="instruction-item">
+                    <div class="instruction-number">1</div>
+                    <div class="instruction-text">
+                        <strong>Type in the medieval history themed crossword puzzle</strong>
+                    </div>
+                    <div class="instruction-visual">
+                        <div class="mini-grid">
+                            <div class="mini-cell"></div>
+                            <div class="mini-cell filled">A</div>
+                            <div class="mini-cell"></div>
+                            <div class="mini-cell"></div>
+                            <div class="mini-cell filled">M</div>
+                            <div class="mini-cell filled">O</div>
+                            <div class="mini-cell filled">L</div>
+                            <div class="mini-cell filled">E</div>
+                            <div class="mini-cell"></div>
+                            <div class="mini-cell filled">M</div>
+                            <div class="mini-cell"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="instruction-item">
+                    <div class="instruction-number">2</div>
+                    <div class="instruction-text">
+                        <strong>Click 'CHECK' to verify your answer</strong>
+                    </div>
+                    <div class="instruction-visual">
+                        <button class="check-demo-btn">CHECK</button>
+                    </div>
+                </div>
+            </div>
+            <button class="back-btn" id="backBtn">BACK</button>
+        </div>
+    </div>
+
+    <!-- Music Control Button -->
+    <button class="music-control" id="musicControl" title="Toggle Music">
+        🔊
+    </button>
+
+    <!-- Background Music -->
+    <audio id="bgMusic" loop>
+        <source src="music.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const playBtn = document.getElementById('playBtn');
+        const howToBtn = document.getElementById('howToBtn');
+        const howToPopup = document.getElementById('howToPopup');
+        const backBtn = document.getElementById('backBtn');
+        const gameTitleImg = document.getElementById('gameTitleImg');
+        const gameTitleText = document.getElementById('gameTitleText');
+        const bgAnimation = document.getElementById('bgAnimation');
+        const bgMusic = document.getElementById('bgMusic');
+        const musicControl = document.getElementById('musicControl');
+
+        // Set music volume to 50%
+        bgMusic.volume = 0.5;
+
+        // Music control
+        let isMusicPlaying = false;
+
+        // Try to autoplay music immediately
+        bgMusic.play().then(() => {
+            isMusicPlaying = true;
+            musicControl.textContent = '🔊';
+            musicControl.classList.remove('muted');
+        }).catch(e => {
+            // Autoplay blocked by browser, wait for user interaction
+            console.log('Autoplay blocked, waiting for user interaction');
+            musicControl.classList.add('muted');
+            musicControl.textContent = '🔇';
+            
+            // Try to play on first user interaction
+            document.addEventListener('click', function autoplayMusic() {
+                if (!isMusicPlaying) {
+                    bgMusic.play().then(() => {
+                        isMusicPlaying = true;
+                        musicControl.textContent = '🔊';
+                        musicControl.classList.remove('muted');
+                    }).catch(e => console.log('Music play failed:', e));
+                }
+                document.removeEventListener('click', autoplayMusic);
+            }, { once: true });
+        });
+
+        musicControl.addEventListener('click', function() {
+            if (isMusicPlaying) {
+                bgMusic.pause();
+                musicControl.textContent = '🔇';
+                musicControl.classList.add('muted');
+                isMusicPlaying = false;
+            } else {
+                bgMusic.play().catch(e => console.log('Music play failed:', e));
+                musicControl.textContent = '🔊';
+                musicControl.classList.remove('muted');
+                isMusicPlaying = true;
+            }
+        });
+
+        // Words related to medieval history and dynasties
+        const words = [
+            'SHALL', 'MIGHT', 'CANNOT', 'MUST', 'WILL', 'COULD',
+            'SHOULD', 'WOULD', 'MAY', 'CAN', 'MODAL', 'GRAMMAR',
+            'ABILITY', 'OBLIGATION', 'PERMISSION', 'SUGGESTION',
+            'ADVICE', 'POSSIBILITY', 'REQUEST', 'AUXILIARY',
+            'VERB', 'TENSE', 'ENGLISH', 'CLASS', 'LANGUAGE'
+        ];
+
+        const activeWords = [];
+        const maxWords = window.innerWidth < 600 ? 8 : 15;
+
+        // Define exclusion zones (center of screen where buttons/title are)
+        function isInExclusionZone(x, y, width, height) {
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            
+            // Define exclusion zone dimensions
+            const exclusionWidth = window.innerWidth < 600 ? 350 : 550;
+            const exclusionHeight = window.innerHeight < 600 ? 400 : 500;
+            
+            const exclusionLeft = centerX - exclusionWidth / 2;
+            const exclusionRight = centerX + exclusionWidth / 2;
+            const exclusionTop = centerY - exclusionHeight / 2;
+            const exclusionBottom = centerY + exclusionHeight / 2;
+            
+            // Check if word overlaps with exclusion zone
+            return !(x + width < exclusionLeft || 
+                     x > exclusionRight || 
+                     y + height < exclusionTop || 
+                     y > exclusionBottom);
+        }
+
+        // Check if word overlaps with existing words
+        function overlapsWithExisting(x, y, width, height) {
+            const padding = 20; // Space between words
+            
+            for (let word of activeWords) {
+                const rect = word.getBoundingClientRect();
+                const wordX = parseFloat(word.style.left);
+                const wordY = parseFloat(word.style.top);
+                const wordWidth = rect.width;
+                const wordHeight = rect.height;
+                
+                if (!(x + width + padding < wordX || 
+                      x > wordX + wordWidth + padding || 
+                      y + height + padding < wordY || 
+                      y > wordY + wordHeight + padding)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getRandomPosition(wordLength, direction) {
+            const margin = 50;
+            const boxSize = 37; // 35px + 2px gap
+            const width = direction === 'horizontal' ? wordLength * boxSize : boxSize;
+            const height = direction === 'vertical' ? wordLength * boxSize : boxSize;
+            
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            while (attempts < maxAttempts) {
+                const x = Math.random() * (window.innerWidth - width - margin * 2) + margin;
+                const y = Math.random() * (window.innerHeight - height - margin * 2) + margin;
+                
+                if (!isInExclusionZone(x, y, width, height) && 
+                    !overlapsWithExisting(x, y, width, height)) {
+                    return { x, y };
+                }
+                attempts++;
+            }
+            
+            return null; // No valid position found
+        }
+
+        function createWord() {
+            if (activeWords.length >= maxWords) return;
+
+            const word = words[Math.floor(Math.random() * words.length)];
+            const direction = Math.random() > 0.5 ? 'horizontal' : 'vertical';
+            const position = getRandomPosition(word.length, direction);
+            
+            if (!position) return; // Skip if no valid position
+
+            const wordContainer = document.createElement('div');
+            wordContainer.className = `word-container ${direction}`;
+            wordContainer.style.left = position.x + 'px';
+            wordContainer.style.top = position.y + 'px';
+
+            // Create boxes for each letter with staggered animation (25% slower)
+            word.split('').forEach((letter, index) => {
+                const box = document.createElement('div');
+                box.className = 'letter-box';
+                box.textContent = letter;
+                box.style.animationDelay = (index * 0.125) + 's'; // 0.1 * 1.25
+                wordContainer.appendChild(box);
+            });
+
+            bgAnimation.appendChild(wordContainer);
+            activeWords.push(wordContainer);
+
+            // Remove word after random duration (3.75-8.75 seconds, 25% slower)
+            const lifetime = Math.random() * 5000 + 3750;
+            setTimeout(() => {
+                removeWord(wordContainer);
+            }, lifetime);
+        }
+
+        function removeWord(wordContainer) {
+            wordContainer.classList.add('fade-out');
+            
+            setTimeout(() => {
+                if (wordContainer.parentNode) {
+                    wordContainer.remove();
+                }
+                const index = activeWords.indexOf(wordContainer);
+                if (index > -1) {
+                    activeWords.splice(index, 1);
+                }
+            }, 625); // 500 * 1.25
+        }
+
+        // Continuously create new words
+        function startWordAnimation() {
+            createWord();
+            
+            const interval = setInterval(() => {
+                if (activeWords.length < maxWords) {
+                    createWord();
+                }
+            }, 1000); // 800 * 1.25
+        }
+
+        // Start the animation
+        startWordAnimation();
+
+        // Check if game title image exists
+        // (title is now text-based, no image needed)
+
+        // Play button - redirects to game
+        playBtn.addEventListener('click', function() {
+            sessionStorage.setItem('musicPlaying', isMusicPlaying ? '1' : '0');
+            window.location.href = 'game.html';
+        });
+
+        // How to Play button
+        howToBtn.addEventListener('click', function() {
+            howToPopup.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+
+        // Close popup
+        backBtn.addEventListener('click', closePopup);
+
+        // Close popup when clicking outside
+        howToPopup.addEventListener('click', function(e) {
+            if (e.target === howToPopup) {
+                closePopup();
+            }
+        });
+
+        // Close popup with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && howToPopup.classList.contains('active')) {
+                closePopup();
+            }
+        });
+
+        function closePopup() {
+            howToPopup.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+    </script>
+</body>
+</html>
