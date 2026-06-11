@@ -33,8 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastFocusedCell = { row: -1, col: -1 };
     let currentLevel = 1;
     let totalXP = 0;
+    let level1XP = 0;
+    let level2XP = 0;
     let level1Completed = false;
     let level2Completed = false;
+    let level1Attempted = false;
     let wordAttempts = {}; // Track attempts per word
 
     // Analytics Setup
@@ -52,8 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (savedProgress) {
             const progress = JSON.parse(savedProgress);
             totalXP = progress.totalXP || 0;
+            level1XP = progress.level1XP || 0;
+            level2XP = progress.level2XP || 0;
             level1Completed = progress.level1Completed || false;
             level2Completed = progress.level2Completed || false;
+            level1Attempted = progress.level1Attempted || false;
             currentLevel = progress.currentLevel || 1;
         }
         
@@ -77,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function unlockLevelsBasedOnProgress() {
-        if (level1Completed) {
+        if (level1Attempted || level1Completed) {
             level2Btn.disabled = false;
             level2Btn.textContent = 'Level 2';
         }
@@ -99,8 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveProgress() {
         const progress = {
             totalXP,
+            level1XP,
+            level2XP,
             level1Completed,
             level2Completed,
+            level1Attempted,
             currentLevel
         };
         localStorage.setItem('modalMasteryProgress', JSON.stringify(progress));
@@ -489,43 +498,53 @@ document.addEventListener('DOMContentLoaded', () => {
         analytics.addRawMetric('incorrect_cells', incorrectCount);
         analytics.addRawMetric('empty_cells', emptyCount);
         
+        // On first check of Level 1, unlock Level 2 regardless of correctness
+        if (currentLevel === 1 && !level1Attempted) {
+            level1Attempted = true;
+            level2Btn.disabled = false;
+            level2Btn.textContent = 'Level 2';
+            saveProgress();
+        }
+
         if (allCorrect) {
             const timeTaken = Date.now() - levelStartTime;
             
-            // Calculate bonuses
-            let bonusXP = 0;
-            const hintsUsed = Object.values(wordAttempts).filter(attempts => attempts >= 2).length;
-            if (hintsUsed === 0) {
-                bonusXP += currentPuzzleData.metadata.bonusXP || 20; // No hints bonus
-            }
+            // Calculate accuracy-based XP: earnedXP = Math.round(100 * (accuracy / 100))
+            const accuracyBasedXP = Math.round(100 * (parseFloat(accuracy) / 100));
             
-            const totalEarnedXP = earnedXP + bonusXP;
-            totalXP += totalEarnedXP;
-            
-            // Mark level as completed
-            if (currentLevel === 1) {
+            // Only award XP if not already completed this level (no double-dipping)
+            let xpToAward = 0;
+            if (currentLevel === 1 && !level1Completed) {
+                xpToAward = accuracyBasedXP;
+                level1XP = xpToAward;
                 level1Completed = true;
                 level2Btn.disabled = false;
                 level2Btn.textContent = 'Level 2';
-            } else if (currentLevel === 2) {
+            } else if (currentLevel === 2 && !level2Completed) {
+                xpToAward = accuracyBasedXP;
+                level2XP = xpToAward;
                 level2Completed = true;
             }
+            
+            totalXP = level1XP + level2XP;
             
             saveProgress();
             updateXPDisplay();
             
             console.log('[Analytics] Puzzle completed!', {
                 timeTaken: (timeTaken / 1000).toFixed(2) + 's',
-                earnedXP: earnedXP,
-                bonusXP: bonusXP,
-                totalEarnedXP: totalEarnedXP,
+                xpToAward: xpToAward,
                 totalXP: totalXP
             });
             
-            analytics.endLevel(currentLevelId, true, timeTaken, totalEarnedXP);
+            analytics.endLevel(currentLevelId, true, timeTaken, xpToAward);
             analytics.submitReport();
             
-            showSuccessOverlay(totalEarnedXP, accuracy, timeTaken);
+            if (currentLevel === 2) {
+                showEndGameOverlay();
+            } else {
+                showSuccessOverlay(xpToAward, accuracy, timeTaken);
+            }
         } else {
             // Update live stats
             currentAccuracyValue.textContent = `${accuracy}%`;
@@ -557,18 +576,52 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
         factTextElement.textContent = facts[Math.floor(Math.random() * facts.length)];
         
-        if (currentLevel === 1 && !level2Completed) {
-            completionMessage.textContent = '🎉 Level 1 Complete! 🎉';
-            nextLevelBtn.classList.remove('hidden');
-        } else if (currentLevel === 2) {
-            completionMessage.textContent = '🏆 All Levels Complete! 🏆';
-            nextLevelBtn.classList.add('hidden');
-        } else {
-            completionMessage.textContent = '🎉 Level Complete! 🎉';
-            nextLevelBtn.classList.add('hidden');
-        }
+        completionMessage.textContent = '🎉 Level 1 Complete! 🎉';
+        nextLevelBtn.classList.remove('hidden');
         
         successOverlay.classList.remove('hidden');
+    }
+
+    function showEndGameOverlay() {
+        // Remove existing end game overlay if present
+        const existing = document.getElementById('endgame-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'endgame-overlay';
+        overlay.innerHTML = `
+            <div class="endgame-box">
+                <h2 class="endgame-title">🏆 Game Complete! 🏆</h2>
+                <p class="endgame-subtitle">You have conquered Crossword Modal Mastery!</p>
+                <div class="endgame-xp-total">
+                    <span class="endgame-xp-number">${totalXP}</span>
+                    <span class="endgame-xp-max">/ 200</span>
+                </div>
+                <div class="endgame-breakdown">
+                    <div class="endgame-level-row">Level 1: <strong>${level1XP}</strong> / 100 XP</div>
+                    <div class="endgame-level-row">Level 2: <strong>${level2XP}</strong> / 100 XP</div>
+                </div>
+                <button class="endgame-play-again" id="endgame-play-again">Play Again</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        document.getElementById('endgame-play-again').addEventListener('click', () => {
+            // Reset all progress
+            totalXP = 0;
+            level1XP = 0;
+            level2XP = 0;
+            level1Completed = false;
+            level2Completed = false;
+            level1Attempted = false;
+            currentLevel = 1;
+            localStorage.removeItem('modalMasteryProgress');
+            overlay.remove();
+            updateXPDisplay();
+            level2Btn.disabled = true;
+            level2Btn.textContent = 'Level 2 🔒';
+            loadLevel(1);
+        });
     }
 
     // --- SECRET CODES & EVENT LISTENERS ---
