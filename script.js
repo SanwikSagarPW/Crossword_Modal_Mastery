@@ -506,9 +506,13 @@ document.addEventListener('DOMContentLoaded', () => {
             saveProgress();
         }
 
+        // Submit analytics on every check attempt
+        const timeTaken = Date.now() - levelStartTime;
+        analytics.addRawMetric('level_' + currentLevel + '_submit_' + checkAttempts + '_accuracy', accuracy);
+        analytics.addRawMetric('level_' + currentLevel + '_submit_' + checkAttempts + '_xp', earnedXP);
+        analytics.submitReport();
+
         if (allCorrect) {
-            const timeTaken = Date.now() - levelStartTime;
-            
             // Calculate accuracy-based XP: earnedXP = Math.round(100 * (accuracy / 100))
             const accuracyBasedXP = Math.round(100 * (parseFloat(accuracy) / 100));
             
@@ -549,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update live stats
             currentAccuracyValue.textContent = `${accuracy}%`;
             attemptsValue.textContent = checkAttempts;
-            alert(`Not quite right! Keep trying. 💚\n\nCorrect: ${correctCount} | Incorrect: ${incorrectCount} | Empty: ${emptyCount}`);
+            showSubmitModal(correctCount, incorrectCount, emptyCount, accuracy, earnedXP);
         }
     }
 
@@ -582,10 +586,62 @@ document.addEventListener('DOMContentLoaded', () => {
         successOverlay.classList.remove('hidden');
     }
 
+    function showSubmitModal(correctCount, incorrectCount, emptyCount, accuracy, earnedXP) {
+        const existing = document.getElementById('submit-modal-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'submit-modal-overlay';
+        overlay.innerHTML = `
+            <div class="endgame-box">
+                <h2 class="endgame-title">📊 Level ${currentLevel} Progress</h2>
+                <p class="endgame-subtitle">Not all answers are correct yet!</p>
+                <div class="endgame-breakdown">
+                    <div class="endgame-level-row">✅ Correct: <strong>${correctCount}</strong></div>
+                    <div class="endgame-level-row">❌ Incorrect: <strong>${incorrectCount}</strong></div>
+                    <div class="endgame-level-row">⬜ Empty: <strong>${emptyCount}</strong></div>
+                    <div class="endgame-level-row">🎯 Accuracy: <strong>${accuracy}%</strong></div>
+                    <div class="endgame-level-row">⭐ XP Earned: <strong>${earnedXP}</strong></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:12px;margin-top:20px;">
+                    ${currentLevel === 1 ? '<button class="endgame-play-again" id="submit-next-level" style="background-color:#03dac6;color:#040804;">Continue to Level 2 →</button>' : ''}
+                    <button class="endgame-play-again" id="submit-retry">↻ Retry Level ${currentLevel}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const nextBtn = document.getElementById('submit-next-level');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                overlay.remove();
+                // Unlock level 2 if not already
+                if (!level1Attempted) {
+                    level1Attempted = true;
+                    level2Btn.disabled = false;
+                    level2Btn.textContent = 'Level 2';
+                    saveProgress();
+                }
+                loadLevel(2);
+            });
+        }
+
+        document.getElementById('submit-retry').addEventListener('click', () => {
+            overlay.remove();
+        });
+    }
+
     function showEndGameOverlay() {
         // Remove existing end game overlay if present
         const existing = document.getElementById('endgame-overlay');
         if (existing) existing.remove();
+
+        // Submit final score analytics
+        analytics.addRawMetric('final_total_xp', totalXP);
+        analytics.addRawMetric('final_level1_xp', level1XP);
+        analytics.addRawMetric('final_level2_xp', level2XP);
+        analytics.addRawMetric('game_completed', 'true');
+        analytics.submitReport();
 
         const overlay = document.createElement('div');
         overlay.id = 'endgame-overlay';
