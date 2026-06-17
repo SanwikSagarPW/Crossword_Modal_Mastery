@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const { metadata, clues } = currentPuzzleData;
             const { rows, cols } = metadata.size;
-            titleElement.textContent = `🏰 Crossword Medieval Minds`;
+            titleElement.textContent = `📚 Crossword Modal Mastery`;
             levelSubtitle.textContent = `${metadata.title} - ${metadata.difficulty}`;
             gridState = Array(rows).fill(null).map(() => Array(cols).fill(null));
             gridElement.innerHTML = '';
@@ -506,11 +506,9 @@ document.addEventListener('DOMContentLoaded', () => {
             saveProgress();
         }
 
-        // Submit analytics on every check attempt
         const timeTaken = Date.now() - levelStartTime;
         analytics.addRawMetric('level_' + currentLevel + '_submit_' + checkAttempts + '_accuracy', accuracy);
         analytics.addRawMetric('level_' + currentLevel + '_submit_' + checkAttempts + '_xp', earnedXP);
-        analytics.submitReport();
 
         if (allCorrect) {
             // Calculate accuracy-based XP: earnedXP = Math.round(100 * (accuracy / 100))
@@ -553,6 +551,23 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update live stats
             currentAccuracyValue.textContent = `${accuracy}%`;
             attemptsValue.textContent = checkAttempts;
+
+            // Send mid-game level_submit event (matching Crossword_Microorganisms format)
+            const submitPayload = {
+                event: 'level_submit',
+                gameId: 'modal_mastery_crossword',
+                level: currentLevel,
+                attempt: checkAttempts,
+                accuracy: parseFloat(accuracy),
+                xpEarned: earnedXP,
+                timeTaken: Date.now() - levelStartTime,
+                correct: correctCount,
+                incorrect: incorrectCount,
+                empty: emptyCount
+            };
+            try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(submitPayload)); } catch(e) {}
+            try { window.parent.postMessage(submitPayload, '*'); } catch(e) {}
+
             showSubmitModal(correctCount, incorrectCount, emptyCount, accuracy, earnedXP);
         }
     }
@@ -642,6 +657,17 @@ document.addEventListener('DOMContentLoaded', () => {
         analytics.addRawMetric('final_level2_xp', level2XP);
         analytics.addRawMetric('game_completed', 'true');
         analytics.submitReport();
+
+        // Send final game_completed event (matching Crossword_Microorganisms format)
+        const finalPayload = {
+            event: 'game_completed',
+            gameId: 'modal_mastery_crossword',
+            game_completed: true,
+            final_total_xp: totalXP,
+            per_level_xp: [level1XP, level2XP]
+        };
+        try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(finalPayload)); } catch(e) {}
+        try { window.parent.postMessage(finalPayload, '*'); } catch(e) {}
 
         const overlay = document.createElement('div');
         overlay.id = 'endgame-overlay';
