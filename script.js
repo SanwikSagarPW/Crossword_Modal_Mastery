@@ -1,10 +1,80 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
+
+    function parsePuzzleJson(text) {
+        return JSON.parse(text.replace(/^\uFEFF/, '').trim());
+    }
+    async function loadPuzzleData(candidates) {
+        const cacheBust = 'ts=' + Date.now();
+        const loadErrors = [];
+
+        for (const file of candidates) {
+            try {
+                const response = await fetch(file + '?' + cacheBust, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const parsed = parsePuzzleJson(await response.text());
+                if (!parsed || !parsed.metadata || !parsed.clues) {
+                    throw new Error('Invalid puzzle format (missing metadata or clues).');
+                }
+
+                return parsed;
+            } catch (error) {
+                loadErrors.push(`${file}: ${error.message}`);
+            }
+        }
+
+        throw new Error('Could not load puzzle data. Tried: ' + loadErrors.join(' | '));
+    }
+
+    function getLevelPuzzleCandidates(levelNum) {
+        if (levelNum === 2) return ['puzzle-level2.json', 'level2.json'];
+        if (levelNum === 1) return ['puzzle.json', 'level1.json'];
+
+        return [
+            `puzzle-level${levelNum}.json`,
+            `level${levelNum}.json`,
+            'puzzle.json'
+        ];
+    }
+    function normalizeClues(rawClues) {
+        const across = [];
+        const down = [];
+        const seen = new Set();
+
+        const addClue = (clue, fallbackDirection) => {
+            if (!clue || clue.number == null) return;
+            const direction = String(clue.direction || fallbackDirection || 'across').toLowerCase();
+            const key = direction + '-' + clue.number;
+            if (seen.has(key)) return;
+            seen.add(key);
+            const normalized = {
+                ...clue,
+                direction,
+                answer: String(clue.answer || '').toUpperCase(),
+                clue: String(clue.clue || clue.question || clue.text || '').trim()
+            };
+            if (!normalized.clue || !normalized.answer) return;
+            if (direction === 'down') down.push(normalized);
+            else across.push(normalized);
+        };
+
+        (rawClues.across || []).forEach((clue) => addClue(clue, 'across'));
+        (rawClues.down || []).forEach((clue) => addClue(clue, 'down'));
+
+        across.sort((a, b) => a.number - b.number);
+        down.sort((a, b) => a.number - b.number);
+        return { across, down };
+    }
+
     // DOM Elements
     const gridElement = document.getElementById('crossword-grid');
     const acrossCluesElement = document.getElementById('across-clues');
     const downCluesElement = document.getElementById('down-clues');
     const titleElement = document.getElementById('puzzle-title');
     const levelSubtitle = document.getElementById('level-subtitle');
+    const backBtn = document.getElementById('back-btn');
+    const hintBtn = document.getElementById('hint-btn');
+    const progressText = document.getElementById('progress-text');
     const checkButton = document.getElementById('check-btn');
     const clearButton = document.getElementById('clear-btn');
     const successOverlay = document.getElementById('success-overlay');
@@ -70,9 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadLevel(levelNum) {
         try {
-            const puzzleFile = levelNum === 1 ? 'puzzle.json' : 'puzzle-level2.json';
-            const response = await fetch(puzzleFile);
-            currentPuzzleData = await response.json();
+            currentPuzzleData = await loadPuzzleData(getLevelPuzzleCandidates(levelNum));
             currentLevel = levelNum;
             initializeGame();
             updateLevelButtons();
@@ -126,9 +194,11 @@ document.addEventListener('DOMContentLoaded', () => {
         attemptsValue.textContent = '0';
         
         try {
-            const { metadata, clues } = currentPuzzleData;
+            const { metadata, clues: rawClues } = currentPuzzleData;
+            const clues = normalizeClues(rawClues);
+            currentPuzzleData.clues = clues;
             const { rows, cols } = metadata.size;
-            titleElement.textContent = `📚 Crossword Modal Mastery`;
+            titleElement.textContent = `ðŸ“š Crossword Modal Mastery`;
             levelSubtitle.textContent = `${metadata.title} - ${metadata.difficulty}`;
             gridState = Array(rows).fill(null).map(() => Array(cols).fill(null));
             gridElement.innerHTML = '';
@@ -142,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
             populateGridState(clues.across);
             populateGridState(clues.down);
             renderGrid(rows, cols);
+            updateProgress();
             renderClues(clues.across, acrossCluesElement, 'across');
             renderClues(clues.down, downCluesElement, 'down');
 
@@ -159,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- GRID & CLUE RENDERING ---
 
     function populateGridState(clueList) {
-        clueList.forEach(clue => {
+        [...clueList].sort((a, b) => a.number - b.number).forEach(clue => {
             const answer = clue.answer.toUpperCase();
             for (let i = 0; i < answer.length; i++) {
                 const r = clue.direction === 'across' ? clue.row : clue.row + i;
@@ -217,10 +288,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 gridElement.appendChild(cell);
             }
         }
+        updateProgress();
+    }
+
+    function updateProgress() {
+        const inputs = [...document.querySelectorAll('.cell-input')];
+        const filledCount = inputs.filter(input => input.value.trim() !== '').length;
+        const totalCells = inputs.length;
+        if (progressText) {
+            progressText.textContent = `${filledCount}/${totalCells}`;
+        }
     }
 
     function renderClues(clueList, listElement, direction) {
-        clueList.forEach(clue => {
+        listElement.innerHTML = '';
+        [...clueList].sort((a, b) => a.number - b.number).forEach(clue => {
             const li = document.createElement('li');
             li.textContent = clue.number + '. ' + clue.clue;
             li.dataset.number = clue.number;
@@ -228,6 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
             li.addEventListener('click', handleClueClick);
             listElement.appendChild(li);
         });
+        listElement.dataset.count = String(clueList.length);
     }
 
     // --- USER INPUT & INTERACTION ---
@@ -254,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
+        updateProgress();
     }
 
     function handleKeyDown(e) {
@@ -265,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             if (e.target.value !== '') {
                 e.target.value = '';
+                updateProgress();
                 return;
             }
             if (activeClueInfo) {
@@ -595,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
         factTextElement.textContent = facts[Math.floor(Math.random() * facts.length)];
         
-        completionMessage.textContent = '🎉 Level 1 Complete! 🎉';
+        completionMessage.textContent = 'ðŸŽ‰ Level 1 Complete! ðŸŽ‰';
         nextLevelBtn.classList.remove('hidden');
         
         successOverlay.classList.remove('hidden');
@@ -609,18 +694,18 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.id = 'submit-modal-overlay';
         overlay.innerHTML = `
             <div class="endgame-box">
-                <h2 class="endgame-title">📊 Level ${currentLevel} Progress</h2>
+                <h2 class="endgame-title">ðŸ“Š Level ${currentLevel} Progress</h2>
                 <p class="endgame-subtitle">Not all answers are correct yet!</p>
                 <div class="endgame-breakdown">
-                    <div class="endgame-level-row">✅ Correct: <strong>${correctCount}</strong></div>
-                    <div class="endgame-level-row">❌ Incorrect: <strong>${incorrectCount}</strong></div>
-                    <div class="endgame-level-row">⬜ Empty: <strong>${emptyCount}</strong></div>
-                    <div class="endgame-level-row">🎯 Accuracy: <strong>${accuracy}%</strong></div>
-                    <div class="endgame-level-row">⭐ XP Earned: <strong>${earnedXP}</strong></div>
+                    <div class="endgame-level-row">âœ… Correct: <strong>${correctCount}</strong></div>
+                    <div class="endgame-level-row">âŒ Incorrect: <strong>${incorrectCount}</strong></div>
+                    <div class="endgame-level-row">â¬œ Empty: <strong>${emptyCount}</strong></div>
+                    <div class="endgame-level-row">ðŸŽ¯ Accuracy: <strong>${accuracy}%</strong></div>
+                    <div class="endgame-level-row">â­ XP Earned: <strong>${earnedXP}</strong></div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:12px;margin-top:20px;">
-                    ${currentLevel === 1 ? '<button class="endgame-play-again" id="submit-next-level" style="background-color:#03dac6;color:#040804;">Continue to Level 2 →</button>' : ''}
-                    <button class="endgame-play-again" id="submit-retry">↻ Retry Level ${currentLevel}</button>
+                    ${currentLevel === 1 ? '<button class="endgame-play-again" id="submit-next-level" style="background-color:#03dac6;color:#040804;">Continue to Level 2 â†’</button>' : ''}
+                    <button class="endgame-play-again" id="submit-retry">â†» Retry Level ${currentLevel}</button>
                 </div>
             </div>
         `;
@@ -673,7 +758,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.id = 'endgame-overlay';
         overlay.innerHTML = `
             <div class="endgame-box">
-                <h2 class="endgame-title">🏆 Game Complete! 🏆</h2>
+                <h2 class="endgame-title">ðŸ† Game Complete! ðŸ†</h2>
                 <p class="endgame-subtitle">You have conquered Crossword Modal Mastery!</p>
                 <div class="endgame-xp-total">
                     <span class="endgame-xp-number">${totalXP}</span>
@@ -701,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
             overlay.remove();
             updateXPDisplay();
             level2Btn.disabled = true;
-            level2Btn.textContent = 'Level 2 🔒';
+            level2Btn.textContent = 'Level 2 ðŸ”’';
             loadLevel(1);
         });
     }
@@ -779,6 +864,11 @@ document.addEventListener('DOMContentLoaded', () => {
         loadLevel(currentLevel);
         successOverlay.classList.add('hidden');
     });
+
+    if (backBtn) backBtn.addEventListener('click', () => { window.location.href = 'index.html'; });
+    if (hintBtn) hintBtn.addEventListener('click', () => {
+        if (activeClueInfo) showHint(activeClueInfo, currentDirection);
+    });
     
     // Track incomplete sessions when user leaves
     window.addEventListener('beforeunload', () => {
@@ -796,3 +886,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start Game
     startGame();
 });
+
